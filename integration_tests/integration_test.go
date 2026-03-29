@@ -40,7 +40,7 @@ func TestWget(t *testing.T) {
 		t.Error()
 	}
 	bin := buildBinary(t)
-	out, err := runCmd(t, bin, "https://tech.wildberries.ru/")
+	out, err := runCmd(t, bin, "https://tech.wildberries.ru/", "-d", "1")
 	if err == nil {
 		t.Error("expected command error (site blocks scraping), got success")
 	}

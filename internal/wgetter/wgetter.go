@@ -32,7 +32,12 @@ func (wg *WGetter) WGet(link string, depth int) error {
 		return err
 	}
 
-	re, err := regexp.Compile("https?://([a-z0-9]+[.])*" + URL.Host)
+	hostRe, err := regexp.Compile("https?://([a-z0-9]+[.])*\\.?(" + regexp.QuoteMeta(URL.Host) + "|iana.org)")
+	if err != nil {
+		return err
+	}
+
+	disallowedRe, err := regexp.Compile(`(?i)(mailto|tel|javascript):`)
 	if err != nil {
 		return err
 	}
@@ -41,44 +46,53 @@ func (wg *WGetter) WGet(link string, depth int) error {
 		return err
 	}
 
-	collector := colly.NewCollector(colly.MaxDepth(depth), colly.URLFilters(re))
+	collector := colly.NewCollector(
+		colly.MaxDepth(depth),
+		colly.Async(true),
+		colly.URLFilters(hostRe),
+		colly.DisallowedURLFilters(disallowedRe),
+		colly.AllowedDomains(URL.Hostname()),
+	)
 
-	collector.OnHTML("a[href]", func(el *colly.HTMLElement) {
+	collector.OnHTML("a[href], link[rel=stylesheet], script[src], img[src], link[rel=icon]", func(el *colly.HTMLElement) {
 		ul := el.Request.AbsoluteURL(el.Attr("href"))
 		if !downloadedLinks[ul] {
+			downloadedLinks[ul] = true
 			if err := collector.Visit(ul); err != nil {
-				return
+				log.Printf("visit %s failed: %v", ul, err)
 			}
 		}
 	})
 
 	collector.OnResponse(func(r *colly.Response) {
-		reqURLPath := r.Request.URL.Path
-		fullPath := downloadPath + "/" + URL.Hostname() + reqURLPath
+		u := r.Request.URL
+		fullPath := downloadPath + "/" + URL.Hostname() + u.Path
+
+		if u.RawQuery != "" {
+			fullPath += "?" + u.RawQuery
+		}
+
+		fullPath = strings.TrimSuffix(fullPath, "/")
+
+		if path.Ext(fullPath) == "" && !strings.HasSuffix(u.Path, "/") {
+			fullPath += "/index.html"
+		}
 
 		if downloadedLinks[fullPath] {
 			return
 		}
 
 		downloadedLinks[fullPath] = true
-		if path.Ext(fullPath) == "" {
-			if err := mkdir(fullPath); err != nil {
-				log.Printf("mkdir %s failed: %v", fullPath, err)
+
+		if path.Ext(fullPath) == "" || strings.Contains(fullPath, "index.html") {
+			dir := strings.TrimSuffix(fullPath, "index.html")
+			if err := mkdir(dir); err != nil {
+				log.Printf("mkdir %s failed: %v", dir, err)
 			}
 		} else {
-			dirPath := fullPath[:strings.LastIndexByte(fullPath, '/')]
+			dirPath := path.Dir(fullPath)
 			if err := mkdir(dirPath); err != nil {
 				log.Printf("mkdir %s failed: %v", dirPath, err)
-			}
-		}
-
-		if path.Ext(reqURLPath) == "" {
-			if fullPath[len(fullPath)-1] != '/' {
-				fullPath += "/"
-			}
-			fullPath += "index.html"
-			if _, err := os.Create(fullPath); err != nil {
-				fmt.Printf("error creating file: %s\n", err.Error())
 			}
 		}
 
@@ -87,7 +101,7 @@ func (wg *WGetter) WGet(link string, depth int) error {
 			return
 		}
 
-		fmt.Println("saved:", URL.Hostname()+reqURLPath)
+		fmt.Println("saved:", URL.Hostname()+u.Path)
 	})
 
 	if err = collector.Visit(URL.String()); err != nil {
