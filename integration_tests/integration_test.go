@@ -22,16 +22,14 @@ func buildBinary(t *testing.T) string {
 	return binPath
 }
 
-func runCmd(t *testing.T, bin string, args ...string) string {
+func runCmd(t *testing.T, bin string, args ...string) (string, error) {
 	t.Helper()
 	cmd := exec.Command(bin, args...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("command failed: %v\nOutput:\n%s", err, out.String())
-	}
-	return strings.TrimRight(out.String(), "\n")
+	err := cmd.Run()
+	return strings.TrimRight(out.String(), "\n"), err
 }
 
 func TestWget(t *testing.T) {
@@ -42,10 +40,13 @@ func TestWget(t *testing.T) {
 		t.Error()
 	}
 	bin := buildBinary(t)
-	out := runCmd(t, bin, "https://tech.wildberries.ru/")
+	out, err := runCmd(t, bin, "https://tech.wildberries.ru/")
+	if err == nil {
+		t.Error("expected command error (site blocks scraping), got success")
+	}
 	expected := "error downloading site: "
-	if strings.Contains(out, expected) {
-		t.Errorf("unexpected output:\nGot:\n%s\nWant:\n%s", out, expected)
+	if !strings.Contains(out, expected) {
+		t.Errorf("expected output to contain '%s', got:\n%s", expected, out)
 	}
 	err = os.RemoveAll("downloadedSite")
 	if err != nil {

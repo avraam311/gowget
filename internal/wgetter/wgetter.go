@@ -37,7 +37,9 @@ func (wg *WGetter) WGet(link string) error {
 		return err
 	}
 
-	mkdir(downloadPath + "/" + URL.Host)
+	if err := mkdir(downloadPath + "/" + URL.Host); err != nil {
+		return err
+	}
 
 	collector := colly.NewCollector(colly.MaxDepth(1), colly.URLFilters(re))
 
@@ -60,9 +62,14 @@ func (wg *WGetter) WGet(link string) error {
 
 		downloadedLinks[fullPath] = true
 		if path.Ext(fullPath) == "" {
-			mkdir(fullPath)
+			if err := mkdir(fullPath); err != nil {
+				log.Printf("mkdir %s failed: %v", fullPath, err)
+			}
 		} else {
-			mkdir(fullPath[:strings.LastIndexByte(fullPath, '/')])
+			dirPath := fullPath[:strings.LastIndexByte(fullPath, '/')]
+			if err := mkdir(dirPath); err != nil {
+				log.Printf("mkdir %s failed: %v", dirPath, err)
+			}
 		}
 
 		if path.Ext(reqURLPath) == "" {
@@ -76,22 +83,23 @@ func (wg *WGetter) WGet(link string) error {
 		}
 
 		if err = r.Save(fullPath); err != nil {
-			panic(err)
+			log.Printf("save %s failed: %v", fullPath, err)
+			return
 		}
 
 		fmt.Println("saved:", URL.Hostname()+reqURLPath)
 	})
 
 	if err = collector.Visit(URL.String()); err != nil {
-		log.Panic("err: visit: " + err.Error())
+		return fmt.Errorf("visit %s: %w", URL.String(), err)
 	}
 	collector.Wait()
 	return nil
 }
 
-func mkdir(folderName string) {
-	_, err := os.Stat(folderName)
-	if os.IsNotExist(err) && os.MkdirAll(folderName, os.ModePerm) != nil {
-		log.Panic(err)
+func mkdir(folderName string) error {
+	if err := os.MkdirAll(folderName, os.ModePerm); err != nil {
+		return fmt.Errorf("mkdir %s: %w", folderName, err)
 	}
+	return nil
 }
