@@ -23,7 +23,7 @@ func New() *WGetter {
 	return &WGetter{}
 }
 
-func (wg *WGetter) WGet(link string) error {
+func (wg *WGetter) WGet(link string, depth int) error {
 	downloadedLinks := make(map[string]bool)
 
 	link = strings.TrimRight(link, "/")
@@ -41,7 +41,7 @@ func (wg *WGetter) WGet(link string) error {
 		return err
 	}
 
-	collector := colly.NewCollector(colly.MaxDepth(1), colly.URLFilters(re))
+	collector := colly.NewCollector(colly.MaxDepth(depth), colly.URLFilters(re))
 
 	collector.OnHTML("a[href]", func(el *colly.HTMLElement) {
 		ul := el.Request.AbsoluteURL(el.Attr("href"))

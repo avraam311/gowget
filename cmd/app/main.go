@@ -20,7 +20,7 @@ func New(wget *wgetter.WGetter, flags *flags.Flags) *App {
 }
 
 func (a *App) Run() {
-	err := a.wgetter.WGet(a.flags.URL)
+	err := a.wgetter.WGet(a.flags.URL, a.flags.Depth)
 	if err != nil {
 		log.Fatalf("error downloading site: %v", err)
 	}
